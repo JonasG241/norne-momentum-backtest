@@ -31,11 +31,6 @@ datasets = [
 
 df = pd.read_csv("norne-momentum-backtest/data/raw/Medistim Stock Price History.csv") 
 
-print(df.iloc[:500])
+first_date = df['Date'].iloc[-1]
 
-
-class Dataset:
-    def __init__(self):
-        pass
-
-    
+print(first_date)
