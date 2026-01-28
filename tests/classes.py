@@ -6,33 +6,9 @@ from matplotlib.colors import ListedColormap
 import strategies as strat
 import helping_fuctions as hf
 
-name_datasets = [
-    "Arctic Bioscience AS Stock Price History.csv",
-    "Arcticzymes Tech Stock Price History.csv",
-    "Circio Holding Stock Price History.csv",
-    "Codelab Capital AS Stock Price History.csv",
-    "ContextVision AB Stock Price History.csv",
-    "Exact Therapeutics AS Stock Price History.csv",
-    "Gentian Diagnostics Stock Price History.csv",
-    "INIFY Laboratories Stock Price History.csv",
-    "Lifecare Stock Price History.csv",
-    "Lytix Biopharma AS Stock Price History.csv",
-    "Medistim Stock Price History.csv",
-    "Navamedic Stock Price History.csv",
-    "Nordhealth AS Stock Price History.csv",
-    "Nykode Therapeutics Stock Price History.csv",
-    "Observe Medical Stock Price History.csv",
-    "Omda AS Stock Price History.csv",
-    "Oncoinvent Stock Price History.csv",
-    "PCI Biotech Stock Price History.csv",
-    "Photocure Stock Price History.csv",
-    "SoftOx Solutions Stock Price History.csv",
-    "Thor Medical Stock Price History.csv",
-    "Vistin Pharma ASA Stock Price History.csv",
-    "Zelluna Stock Price History.csv",
-]
 
-print(hf.__file__)
+
+
 
 class Stock():
     def __init__(self, name: str, filename: str, fill_method: str = "average", max_stale_days: int = 5, excange = "OSE"):
@@ -61,6 +37,11 @@ class Stock():
             return dt.set_index("Date")
 
         raise ValueError(f"Unknown fill_method: {self.fill_method}")
+    
+    def get_data(self, start_date: pd.Timestamp, end_date: pd.Timestamp):
+        dt = self.data.copy()
+        mask = (dt.index >= start_date) & (dt.index <= end_date)
+        return dt.loc[mask]
 
 
 
@@ -117,7 +98,7 @@ class StockUniverse():
             ax.imshow(grid, aspect="auto", interpolation="nearest",
                       cmap=cmap, vmin=0, vmax=2)
 
-            ax.set_title(i.replace("Stock Price History.csv", "").strip(), fontsize=9)
+            ax.set_title(stock.name, fontsize=9)
             ax.set_xlabel("Day of year")
             ax.set_ylabel("Year")
             ax.set_yticks(range(len(years)))
@@ -130,31 +111,56 @@ class StockUniverse():
         plt.show()
 
 
+class Portifolio():
+    def __init__(self, initial_capital: float):
+        self.initial_capital = initial_capital
+        self.cash = initial_capital
+        self.holdings = {}
+        self.total_value = initial_capital
 
+    def buy_holdings(self, stock_name: str, quantity: int, price: float):
+        if stock_name in self.holdings:
+            self.holdings[stock_name] += quantity
+        else:
+            self.holdings[stock_name] = quantity
+        self.cash -= quantity * price
+        self.total_value = self.cash + sum(qty * price for qty, price in self.holdings.items())
+
+    def sell_holdings(self, stock_name: str, quantity: int, price: float):
+        if stock_name in self.holdings and self.holdings[stock_name] >= quantity:
+            self.holdings[stock_name] -= quantity
+            self.cash += quantity * price
+            self.total_value = self.cash + sum(qty * price for qty, price in self.holdings.items())
+        else:
+            raise ValueError("Not enough holdings to sell")
 
 
 class Backtest():
-
-    def __init__(self, universe: StockUniverse, strategy: strat.Strategy):
+    def __init__(self, universe: StockUniverse, strategy: strat.Strategy, initial_capital: float = 100000):
         self.universe = universe
         self.strategy = strategy
+        self.portofilio = Portifolio(initial_capital=initial_capital)
 
-    def run(self, start_date: pd.Timestamp, end_date: pd.Timestamp, initial_capital: float):
-        pass
+    def run(self, start_date: pd.Timestamp, end_date: pd.Timestamp, portifolio: Portifolio):
+
+        universe = self.universe
+        portifolio = portifolio
+
+        for time in pd.date_range(start_date, end_date):        
+            for stock in universe.stocks:
+                stock_data = stock.get_data(start_date, end_date)
+                signal = self.strategy.generate_signal(time, stock_data)
+                if signal == "buy":
+                    portifolio.buy_holdings(stock.name, quantity=self.strategy.allocation_per_position, price=stock_data.loc[time, "Close"])
+                if signal == "sell":
+                    portifolio.sell_holdings(stock.name, quantity=self.strategy.allocation_per_position, price=stock_data.loc[time, "Close"])
+                if signal == "hold":
+                    continue
 
 
 
-stocks = []
-for i in name_datasets:
-    stock = Stock(
-        name=i.replace("Stock Price History.csv", "").strip(),
-        filename=f"norne-momentum-backtest/data/raw/{i}",
-        fill_method="average"
-    )
-    stocks.append(stock)
 
-universe = StockUniverse(stocks)
-universe.visualize_missing_data()
+        
 
 
 
