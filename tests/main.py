@@ -1,49 +1,60 @@
+from pathlib import Path
 import pandas as pd
-import pandas_market_calendars as mcal
 import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.colors import ListedColormap
-import strategies as strat
-import helping_fuctions as hf
-import classes as cls
 
-name_datasets = [
-    "Arctic Bioscience AS Stock Price History.csv",
-    "Arcticzymes Tech Stock Price History.csv",
-    "Circio Holding Stock Price History.csv",
-    "Codelab Capital AS Stock Price History.csv",
-    "ContextVision AB Stock Price History.csv",
-    "Exact Therapeutics AS Stock Price History.csv",
-    "Gentian Diagnostics Stock Price History.csv",
-    "INIFY Laboratories Stock Price History.csv",
-    "Lifecare Stock Price History.csv",
-    "Lytix Biopharma AS Stock Price History.csv",
-    "Medistim Stock Price History.csv",
-    "Navamedic Stock Price History.csv",
-    "Nordhealth AS Stock Price History.csv",
-    "Nykode Therapeutics Stock Price History.csv",
-    "Observe Medical Stock Price History.csv",
-    "Omda AS Stock Price History.csv",
-    "Oncoinvent Stock Price History.csv",
-    "PCI Biotech Stock Price History.csv",
-    "Photocure Stock Price History.csv",
-    "SoftOx Solutions Stock Price History.csv",
-    "Thor Medical Stock Price History.csv",
-    "Vistin Pharma ASA Stock Price History.csv",
-    "Zelluna Stock Price History.csv",
-]
-
-stocks = []
-for i in name_datasets:
-    stock = cls.Stock(
-        name=i.replace("Stock Price History.csv", "").strip(),
-        filename=f"norne-momentum-backtest/data/raw/{i}",
-        fill_method="average"
-    )
-    stocks.append(stock)
-
-universe = cls.StockUniverse(stocks)
-universe.visualize_missing_data()
+from setup import Stock, StockUniverse, Backtest
+from strategies import GoldenCross
 
 
+def filename_to_stockname(path: Path) -> str:
+    # "Arctic Bioscience AS Stock Price History.csv" -> "Arctic Bioscience AS"
+    name = path.stem
+    return name.replace(" Stock Price History", "").strip()
 
+
+def main():
+    # tests/main.py -> project root is one level up from tests/
+    root = Path(__file__).resolve().parents[1]
+    data_dir = root / "data" / "raw"
+
+    if not data_dir.exists():
+        raise RuntimeError(f"Data directory not found: {data_dir}")
+
+    csv_files = sorted(data_dir.glob("*.csv"))
+    if not csv_files:
+        raise RuntimeError(f"No CSV files found in: {data_dir}")
+
+    stocks = []
+    for fp in csv_files:
+        stocks.append(
+            Stock(
+                name=filename_to_stockname(fp),
+                filename=str(fp),
+                excange="OSE",
+            )
+        )
+
+    print(f"Loaded {len(stocks)} stocks from {data_dir}")
+
+    universe = StockUniverse(stocks)
+
+    strategy = GoldenCross(allocation_per_position=0.10)  # 10% per position
+    bt = Backtest(universe=universe, strategy=strategy, initial_capital=100_000)
+
+    equity, trades = bt.run(pd.Timestamp("2018-01-01"), pd.Timestamp("2024-12-31"))
+
+    print("\n--- Equity (tail) ---")
+    print(equity.tail())
+
+    print("\n--- Trades (tail) ---")
+    print(trades.tail(20) if len(trades) else "No trades generated.")
+
+    equity["TotalValue"].plot()
+    plt.title("Equity Curve")
+    plt.xlabel("Date")
+    plt.ylabel("Total Value")
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()

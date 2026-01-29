@@ -2,35 +2,37 @@ import pandas as pd
 import pandas_market_calendars as mcal
 
 
-def forward_fill_missing_dates(dt, exchange):
-    dt = dt.copy()
-    dt["Date"] = pd.to_datetime(dt["Date"])
-    dt = dt.sort_values("Date")
-    dt = dt.set_index("Date")
+def align_missing_dates_as_nan(dt: pd.DataFrame, exchange: str = "OSE") -> pd.DataFrame:
+    """
+    Aligns a stock dataframe to *trading days* for the given exchange.
+    Any missing trading days are inserted and will have NaNs for price columns.
 
-    start_date = dt.index.min()
-    end_date = dt.index.max()
+    Input:
+        dt: DataFrame with column "Date" (datetime-like) and price columns (e.g. Close)
+        exchange: calendar name for pandas_market_calendars (e.g. "OSE")
 
-    schedule = mcal.get_calendar(exchange).schedule(start_date=start_date, end_date=end_date)
+    Output:
+        DataFrame indexed by Date (tz-naive), sorted, reindexed to trading days
+    """
+    if "Date" not in dt.columns:
+        raise ValueError("align_missing_dates_as_nan: dt must contain a 'Date' column")
+
+    out = dt.copy()
+    out["Date"] = pd.to_datetime(out["Date"])
+    out = out.sort_values("Date")
+
+    start_date = out["Date"].iloc[0]
+    end_date = out["Date"].iloc[-1]
+
+    cal = mcal.get_calendar(exchange)
+    schedule = cal.schedule(start_date=start_date, end_date=end_date)
     trading_days = schedule.index.tz_localize(None).normalize()
 
-    dt = dt.reindex(trading_days)
-    dt.ffill(inplace=True)
+    out["Date"] = out["Date"].dt.tz_localize(None).dt.normalize()
+    out = out.drop_duplicates(subset=["Date"], keep="last")
+    out = out.set_index("Date").sort_index()
 
-    return dt
+    # Reindex to trading days -> missing days appear as NaN rows
+    out = out.reindex(trading_days)
 
-
-
-def align_missing_dates_as_nan(dt, exchange, date_col="Date"):
-    dt = dt.copy()
-    dt[date_col] = pd.to_datetime(dt[date_col])
-    dt = dt.sort_values(date_col).set_index(date_col)
-
-    start_date = dt.index.min()
-    end_date = dt.index.max()
-
-    schedule = mcal.get_calendar(exchange).schedule(start_date=start_date, end_date=end_date)
-    trading_days = schedule.index.tz_localize(None).normalize()
-
-    dt = dt.reindex(trading_days)
-    return dt
+    return out
