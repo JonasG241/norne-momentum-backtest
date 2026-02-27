@@ -29,6 +29,7 @@ def test_strategy(
     dates: Optional[Sequence] = None,
     data_dir: str = 'data/processed',
     initial_capital: float = 1_000_000.0,
+    plot_index: bool = True,
 ) -> Dict[str, Any]:
     """Run CAPM test and produce diagnostic plots for a strategy.
 
@@ -39,6 +40,7 @@ def test_strategy(
     - dates: optional sequence of datetimes matching the length of the provided arrays. If omitted,
       the function will align the input to the last N dates available in processed OBX and yield files.
     - data_dir: path to processed data (contains OBX and 10y yield files).
+    - plot_index: if True, plots the OBX market index; if False, omits it (default: True).
 
     Returns a dict with keys: 'model' (statsmodels RegressionResults), 'series' (dict of pandas Series),
     and 'figures' (list of matplotlib.Figure).
@@ -107,10 +109,11 @@ def test_strategy(
 
     # Plot 1: cumulative returns (Market vs Strategy vs buy-and-hold underlyings)
     fig1, ax1 = plt.subplots(figsize=(12, 6))
-    ax1.plot(cumulative_mkt.index, cumulative_mkt * 100, label='Market (OBX)', color='black', linewidth=2)
+    if plot_index:
+        ax1.plot(cumulative_mkt.index, cumulative_mkt * 100, label='Market (OBX)', color='black', linewidth=2)
     ax1.plot(cumulative_strat.index, cumulative_strat * 100, label='Strategy', color='tab:blue', linewidth=2)
     for name, cum in cumulative_bh.items():
-        ax1.plot(cum.index, cum * 100, label=f'{name} (Buy&Hold)', linestyle='--', alpha=0.8)
+        ax1.plot(cum.index, cum * 100, label=f'{name} (Buy&Hold)', color='green', linestyle='--', alpha=0.8)
     ax1.set_ylabel('Cumulative Return (%)')
     ax1.set_title('Cumulative Returns: Market vs Strategy vs Buy&Hold')
     ax1.legend()
