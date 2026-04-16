@@ -37,6 +37,7 @@ def main():
     print(f"Loaded {len(stocks)} stocks from {data_dir}")
 
     universe = StockUniverse(stocks)
+    universe.visualize_missing_data()
 
     strategy = GoldenCross(allocation_per_position=0.10)  # 10% per position
     bt = Backtest(universe=universe, strategy=strategy, initial_capital=100_000)
