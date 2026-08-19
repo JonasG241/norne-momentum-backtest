@@ -1,120 +1,99 @@
-# norne-momentum-backtest
-Backtesting of the momentum effect at OBX, with the purpose of finding a decision rule.
+# Norne Momentum Backtest
 
+Research code for testing momentum and moving-average strategies in the Norwegian equity market. The project studies whether historical price trends and moving-average configurations can be used to rank OSEBX constituents and construct systematic long-only and long/short portfolios.
 
-# strategier mtp portefølje:
+The repository contains two generations of the project:
 
-A:
-Overlay per aksje (for beslutningsstøtte)
-Bruk score til å gi “inne/ute” (eller gradert) signal for én aksje.
+- `backtest_v1/` preserves the original research workspace, including the first notebooks, tests, source layout, and public sample data.
+- `backtest_v2/` contains the current strategy and scoring implementations in a cleaner, public-safe structure.
 
-Terskelregel: inne hvis score ≥ k, ute hvis score ≤ m
+## Current implementation
 
-Potensielt, men mer komplisert: Gradert signal: høyere score = sterkere “hold/kjøp”-conviction, lav score = “reduser/selg”
+The v2 research covers two related approaches:
 
-Benchmark: buy-and-hold i samme aksje.
+1. **Winner and loser momentum strategies** rank eligible OSEBX stocks by past returns and evaluate overlapping holding-period portfolios.
+2. **Moving-average scoring** compares 50-, 100-, and 200-day moving averages, evaluates alternative ordering rules, and tests equal-weighted and capitalization-weighted portfolio constructions.
 
-Altså bruk signal til å kjøpe inn og ut av enkelte aksjer, sammenlikn med buy and hold i samme aksje. Test, alle aksjer i ditt domene, hvilken strategi gir høyest gjennomsnittlig meravkastning.
+The backtests account for historical index membership and use delayed signal execution to reduce look-ahead bias. Results from parameter grids should still be interpreted as in-sample research rather than out-of-sample evidence.
 
+## Repository structure
 
+```text
+.
+├── backtest_v1/               # Archived first version of the project
+│   ├── configs/
+│   ├── data/
+│   ├── notebooks/
+│   ├── reports/
+│   ├── src/
+│   └── tests/
+└── backtest_v2/               # Current implementation
+    ├── data/                  # Local private inputs (not committed)
+    ├── notebooks/
+    │   ├── data_preparation.ipynb # Builds derived local inputs
+    │   ├── Ls.ipynb          # Long-only loser strategy
+    │   ├── MVA_Scores.ipynb  # Moving-average scoring and portfolio tests
+    │   ├── Ws.ipynb          # Long-only winner strategy
+    │   └── WsLs_new.ipynb    # Winner-minus-loser strategy
+    ├── results/               # Generated tables (not committed)
+    ├── src/
+    │   ├── WsLs_new.py        # Script version of the long/short backtest
+    │   ├── equal_weight_ma_strategy_fixed_calendar.py
+    │   ├── equal_weight_ma_strategy_score_exposure.py
+    │   ├── momentum_validation.py
+    │   └── mva_order_utils.py # Data loading and MA-scoring utilities
+    └── tests/
+        └── test_wsls_strategy.py
+```
 
+Notebook outputs and execution counts are removed before publication so the repository does not expose generated results or embedded data.
 
-B)
-Likevektet portefølje (1/N)
+## Private data
 
-Bygg en portefølje av aksjer som oppfyller signalet, likevekt mellom dem.
+The v2 market data is licensed/private and is intentionally excluded from the repository. To run the current code, place these source files in `backtest_v2/data/`:
 
-Alle over terskel: hold alle aksjer med score ≥ k
+```text
+TOTRET_DAILY.csv
+MCAP_DAILY.csv
+ON_INDEX.csv
+membership_m.csv
+weights_wide.csv
+```
 
-Top N: hold de N aksjene med høyest score
+The first three files are private source inputs. `membership_m.csv` and `weights_wide.csv` are derived inputs created locally by `data_preparation.ipynb`; they are listed here because the winner and loser notebooks consume them directly.
 
-Bruk: viser om signalet fungerer “i snitt” på tvers av aksjer.
+The expected inputs are wide time-series tables containing total-return levels, market capitalizations, and historical OSEBX membership. See [`backtest_v2/data/README.md`](backtest_v2/data/README.md) for the local data directory convention.
 
+Do not commit private data. The repository's `.gitignore` excludes everything in `backtest_v2/data/` except its README and placeholder file.
 
+## Getting started
 
+Create a Python environment and install the main research dependencies:
 
-C)
-Cap-vektet portefølje (indekslignende)
+```bash
+python -m venv .venv
+python -m pip install numpy pandas matplotlib statsmodels jupyter
+```
 
-Samme seleksjon som over, men vekting etter markedsverdi/indeksvekter.
+After adding the required data, start Jupyter from `backtest_v2/notebooks/` so the notebooks' relative data paths resolve correctly:
 
-Cap-vekt blant aksjer med score ≥ k
+```bash
+cd backtest_v2/notebooks
+jupyter notebook
+```
 
-(evt.) Indeksvekter blant valgte hvis dere har historiske indeksvekter
+The standalone long/short implementation can be run from the repository root:
 
-Bruk: mer direkte sammenliknbar med OBX/indeks.
+```bash
+python backtest_v2/src/WsLs_new.py
+```
 
+## Methodology notes
 
+- Signals are formed using information available at the portfolio-formation date.
+- Historical OSEBX membership is used to reduce survivorship bias.
+- Momentum portfolios use overlapping cohorts and configurable formation and holding periods.
+- Moving-average experiments compare alignment and full-ordering scores based on 50-, 100-, and 200-day averages.
+- Transaction costs, missing observations, weighting conventions, and parameter selection can materially affect reported performance.
 
-
-# Score-varianter basert på 50/100/200 DMA
-
-Dette notatet beskriver to score-metoder for å rangere trendstyrke basert på glidende snitt (50, 100 og 200 dager). Scorene kan brukes som input til både overlay per aksje og porteføljetester.
-
----
-
-## 1) Alignment-score (0–3)
-
-**Idé:** Tell hvor mange “bullish” relasjoner mellom glidende snitt som holder.
-
-Definer indikatorer:
-- `I_50_100 = 1` hvis `DMA50 > DMA100`, ellers `0`
-- `I_100_200 = 1` hvis `DMA100 > DMA200`, ellers `0`
-- `I_50_200 = 1` hvis `DMA50 > DMA200`, ellers `0`
-
-**Alignment-score:**
-- `Score_align = I_50_100 + I_100_200 + I_50_200`  (gir verdi `0..3`)
-
-**Tolkning (intuisjon):**
-- `3`: sterk bullish alignment (typisk `50 > 100 > 200`)
-- `0`: sterk bearish alignment (typisk `50 < 100 < 200`)
-- `1–2`: overgang/miks (delvis bullish, delvis bearish)
-
-**Fordeler:**
-- Enkel, transparent, skalerbar (kan utvides til flere snitt)
-- Krever ikke “håndrangering” av alle permutasjoner
-
-**Ulemper:**
-- Skiller ikke alltid fint mellom alle mønstre som kan ha ulik praksisbetydning
-
----
-
-## 2) Rekkefølge-score (permutasjonsscore)
-
-**Idé:** Det finnes 6 mulige rekkefølger av (DMA50, DMA100, DMA200). Gi hver rekkefølge en score fra “mest bullish” til “mest bearish”.
-
-**De 6 rekkefølgene:**
-1. `50 > 100 > 200`
-2. `50 > 200 > 100`
-3. `100 > 50 > 200`
-4. `100 > 200 > 50`
-5. `200 > 50 > 100`
-6. `200 > 100 > 50`
-
-**Score-format:**
-- `Score_rank ∈ {1..6}` (høyere = mer bullish) *eller* omvendt, men velg én standard og hold dere til den.
-
-**Viktig:**
-- Midtre rekkefølger (2–5) kan rangeres ulikt avhengig av prioritering (f.eks. om dere vektlegger at 200DMA skal ligge nederst/øverst).
-- Derfor bør dere definere og dokumentere rangeringen *før* test (for å unngå “etterrasjonalisering”).
-
-**Fordeler:**
-- Mer granularitet enn alignment-score (skiller alle mønstre)
-- Kan fange preferanser (f.eks. “200DMA nederst er viktig”)
-
-**Ulemper:**
-- Krever et subjektivt rangeringsvalg for “mellomtilfellene”
-- Mindre skalerbar hvis dere senere legger til flere glidende snitt
-
----
-
-## 3) Anbefalt praksis
-
-- Bruk **alignment-score** som primærvariant (enkel, robust).
-- Bruk **rekkefølge-score** som sekundærvariant for å sjekke robusthet og sensitivitet.
-- Dokumentér:
-  - eksakt definisjon av score,
-  - hvilken retning som er “mer bullish”,
-  - eventuelle tie-breaks (likhet mellom snitt) og hvordan dere håndterer dem.
-
----
+This repository is intended for research and educational use. It is not investment advice.

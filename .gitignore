@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Licensed/private inputs for the public v2 backtest
+backtest_v2/data/*
+!backtest_v2/data/.gitkeep
+!backtest_v2/data/README.md
+
+# Generated v2 research outputs
+backtest_v2/results/*
+!backtest_v2/results/.gitkeep
+!backtest_v2/results/README.md
